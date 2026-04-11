@@ -1,7 +1,15 @@
-"""Main entry point."""
+"""Main entry point — starts the FastAPI server."""
 
 import os
+import sys
 from pathlib import Path
+
+# Ensure project root is on sys.path so 'src' is importable
+_project_root = str(Path(__file__).parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
+import uvicorn
 
 
 def load_env():
@@ -18,12 +26,11 @@ def load_env():
                     if line and not line.startswith("#") and "=" in line:
                         key, value = line.split("=", 1)
                         os.environ.setdefault(key.strip(), value.strip())
-            break
 
 
 def main():
     load_env()
-    print("Project running. Edit src/main.py to get started.")
+    uvicorn.run("src.api:app", host="0.0.0.0", port=8000, reload=True)
 
 
 if __name__ == "__main__":
