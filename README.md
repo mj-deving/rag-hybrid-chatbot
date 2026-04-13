@@ -118,7 +118,7 @@ src/
   query_classifier.py    # Adaptive RAG: Query-Routing (simple/standard/complex)
   relevance_checker.py   # CRAG: Post-Retrieval Relevanz-Check
   document_processor.py  # Text-Extraktion, Chunking, Embedding
-  vector_store.py        # Qdrant In-Memory Wrapper
+  vector_store.py        # Qdrant Persistent Storage (data/qdrant/)
   rag_engine.py          # RAG Orchestrator (Classify -> Route -> Retrieve -> Filter -> Generate)
   main.py                # Server-Startup
 static/
@@ -138,8 +138,8 @@ tests/
 | Komponente | Tool |
 |------------|------|
 | API Framework | FastAPI + Uvicorn |
-| Vector DB | Qdrant (In-Memory, kein Docker noetig) |
-| Embeddings | fastembed / BAAI/bge-small-en-v1.5 (ONNX, lokal) |
+| Vector DB | Qdrant (persistent file-based, kein Docker noetig) |
+| Embeddings | fastembed / BAAI/bge-small-en-v1.5 (ONNX, lokal, konfigurierbar) |
 | LLM | Claude Sonnet via OpenRouter |
 | PDF Parsing | PyMuPDF |
 | Frontend | Vanilla HTML/CSS/JS |
@@ -148,24 +148,27 @@ tests/
 
 ```bash
 pytest tests/ -v
-# 36 Tests: document_processor (9), vector_store (7), query_classifier (5), relevance_checker (5), api (9), main (1)
+# 41 Tests: document_processor (9), vector_store (7), query_classifier (5), relevance_checker (5), api (14), main (1)
 ```
 
 ## Konfiguration
 
 Der Server liest API Keys aus `~/.claude/.env` oder Umgebungsvariablen:
 
-| Variable | Zweck |
-|----------|-------|
-| `OPENROUTER_API_KEY` | LLM-Zugang (Claude via OpenRouter) |
+| Variable | Zweck | Default |
+|----------|-------|---------|
+| `OPENROUTER_API_KEY` | LLM-Zugang (Claude via OpenRouter) | (erforderlich) |
+| `RAG_API_KEY` | Bearer-Token fuer API-Authentifizierung | (leer = Auth deaktiviert) |
+| `EMBEDDING_MODEL` | fastembed Modellname | `BAAI/bge-small-en-v1.5` |
+| `EMBEDDING_DIM` | Vektor-Dimension passend zum Modell | `384` |
+| `QDRANT_PATH` | Pfad fuer persistente Qdrant-Daten | `data/qdrant/` |
 
 Embeddings laufen lokal -- kein weiterer Key noetig.
+Fuer bessere deutsche Ergebnisse: `EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`.
 
 ## Einschraenkungen
 
-- **In-Memory**: Qdrant-Daten gehen bei Server-Neustart verloren
-- **Embedding-Modell**: bge-small-en-v1.5 ist gut fuer Englisch, akzeptabel fuer Deutsch
-- **Kein Auth**: Prototype ohne Authentifizierung
+- **Embedding-Modell**: bge-small-en-v1.5 ist gut fuer Englisch, akzeptabel fuer Deutsch (multilingual via Env-Var konfigurierbar)
 
 ## License
 
