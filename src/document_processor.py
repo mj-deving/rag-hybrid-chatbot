@@ -1,5 +1,6 @@
 """Document processing: text extraction, chunking, and embedding."""
 
+import os
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -9,8 +10,10 @@ from fastembed import TextEmbedding
 
 # Lazy-loaded singleton
 _model: TextEmbedding | None = None
-MODEL_NAME = "BAAI/bge-small-en-v1.5"
-EMBEDDING_DIM = 384
+MODEL_NAME = os.environ.get(
+    "EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5"
+)
+EMBEDDING_DIM = int(os.environ.get("EMBEDDING_DIM", "384"))
 CHUNK_SIZE = 2000  # ~500 tokens ≈ 2000 chars
 CHUNK_OVERLAP = 200  # ~50 tokens ≈ 200 chars
 
