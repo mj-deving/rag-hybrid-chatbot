@@ -1,5 +1,6 @@
 """RAG query engine: classify → route → retrieve → check relevance → generate."""
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from src.llm_client import get_client, MODEL, ROUTE_SIMPLE, ROUTE_COMPLEX
@@ -127,8 +128,11 @@ def query(question: str, top_k: int = 5) -> QueryResult:
         total_retrieved = 0
         total_filtered = 0
 
-        for sub_q in classification.sub_queries:
-            relevant, quality = _retrieve_and_filter(sub_q, top_k=top_k)
+        with ThreadPoolExecutor(max_workers=len(classification.sub_queries)) as pool:
+            futures = [pool.submit(_retrieve_and_filter, sq, top_k) for sq in classification.sub_queries]
+            sub_results = [f.result() for f in futures]
+
+        for relevant, quality in sub_results:
             total_retrieved += quality.chunks_retrieved
             total_filtered += quality.chunks_filtered
             for r in relevant:
