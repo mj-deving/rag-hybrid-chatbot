@@ -15,6 +15,9 @@ build/
 data/cache/
 data/outputs/
 
+# AI working state
+MEMORY/
+
 # IDE
 .vscode/
 .idea/
