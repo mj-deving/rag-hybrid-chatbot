@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field
 
 from src.llm_client import (
-    get_client, MODEL, ROUTE_SIMPLE, ROUTE_STANDARD, ROUTE_COMPLEX, VALID_ROUTES,
+    get_client, MODEL_FAST, ROUTE_SIMPLE, ROUTE_STANDARD, ROUTE_COMPLEX, VALID_ROUTES,
 )
 
 CLASSIFIER_PROMPT = """Klassifiziere die folgende Frage in eine von drei Kategorien:
@@ -33,7 +33,7 @@ def classify_query(question: str) -> ClassificationResult:
     client = get_client()
 
     response = client.chat.completions.create(
-        model=MODEL,
+        model=MODEL_FAST,
         max_tokens=256,
         messages=[
             {"role": "system", "content": CLASSIFIER_PROMPT},

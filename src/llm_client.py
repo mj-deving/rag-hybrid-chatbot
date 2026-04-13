@@ -5,6 +5,7 @@ import os
 from openai import OpenAI
 
 MODEL = "anthropic/claude-sonnet-4"
+MODEL_FAST = "anthropic/claude-3.5-haiku"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 ROUTE_SIMPLE = "simple"

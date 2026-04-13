@@ -3,7 +3,7 @@
 import json
 from dataclasses import dataclass
 
-from src.llm_client import get_client, MODEL
+from src.llm_client import get_client, MODEL_FAST
 from src.vector_store import SearchResult
 
 CONFIDENCE_THRESHOLD = 0.3
@@ -52,7 +52,7 @@ def check_relevance(question: str, results: list[SearchResult]) -> RelevanceResu
     )
 
     response = client.chat.completions.create(
-        model=MODEL,
+        model=MODEL_FAST,
         max_tokens=1024,
         messages=[
             {"role": "system", "content": RELEVANCE_PROMPT},
