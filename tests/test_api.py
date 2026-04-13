@@ -82,28 +82,44 @@ class TestDeleteEndpoint:
 
 
 class TestQueryEndpoint:
-    @patch("src.rag_engine.OpenAI")
-    def test_query_with_mock_llm(self, mock_openai_cls):
-        # Upload a document first
+    @patch("src.rag_engine.get_client")
+    @patch("src.relevance_checker.get_client")
+    @patch("src.query_classifier.get_client")
+    def test_query_with_mock_llm(self, mock_cls_client, mock_rel_client, mock_eng_client):
+        import json as _json
+
         client.post(
             "/upload",
             files={"file": ("test.md", b"# AI\n\nKI ist toll.", "text/markdown")},
         )
 
-        # Reset singleton so mock is used
-        import src.rag_engine as re
-        re._client = None
+        def _resp(content, with_usage=False):
+            r = MagicMock()
+            r.choices[0].message.content = content
+            if with_usage:
+                r.usage.prompt_tokens = 100
+                r.usage.completion_tokens = 50
+            else:
+                r.usage = None
+            return r
 
-        # Mock OpenRouter/OpenAI response
-        mock_choice = MagicMock()
-        mock_choice.message.content = "KI ist eine Technologie."
-        mock_usage = MagicMock()
-        mock_usage.prompt_tokens = 100
-        mock_usage.completion_tokens = 50
-        mock_response = MagicMock()
-        mock_response.choices = [mock_choice]
-        mock_response.usage = mock_usage
-        mock_openai_cls.return_value.chat.completions.create.return_value = mock_response
+        cls_client = MagicMock()
+        cls_client.chat.completions.create.return_value = _resp(
+            _json.dumps({"route": "standard", "sub_queries": []})
+        )
+        mock_cls_client.return_value = cls_client
+
+        rel_client = MagicMock()
+        rel_client.chat.completions.create.return_value = _resp(
+            _json.dumps({"scores": [{"index": 0, "relevant": True, "confidence": 0.9}]})
+        )
+        mock_rel_client.return_value = rel_client
+
+        eng_client = MagicMock()
+        eng_client.chat.completions.create.return_value = _resp(
+            "KI ist eine Technologie.", with_usage=True
+        )
+        mock_eng_client.return_value = eng_client
 
         response = client.post("/query", json={"question": "Was ist KI?"})
         assert response.status_code == 200
@@ -111,6 +127,9 @@ class TestQueryEndpoint:
         assert "answer" in data
         assert "sources" in data
         assert "tokens_used" in data
+        assert "routing" in data
+        assert data["routing"]["route"] == "standard"
+        assert "retrieval_quality" in data
 
 
 class TestSwaggerDocs:

@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # Load env vars before importing modules that need API keys
 from src.main import load_env
@@ -45,10 +45,26 @@ class SourceResponse(BaseModel):
     relevance: float
 
 
+class RoutingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    route: str = Field(description="Query route: simple, standard, or complex")
+    sub_queries: list[str] = Field(default_factory=list, description="Sub-queries for complex route")
+
+
+class RetrievalQualityResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    chunks_retrieved: int
+    chunks_relevant: int
+    chunks_filtered: int
+    fallback_triggered: bool
+
+
 class QueryResponse(BaseModel):
     answer: str
     sources: list[SourceResponse]
     tokens_used: int
+    routing: RoutingResponse
+    retrieval_quality: RetrievalQualityResponse | None = None
 
 
 class UploadResponse(BaseModel):
@@ -119,6 +135,13 @@ async def query_documents(req: QueryRequest):
     """Ask a question against indexed documents."""
     result = rag_query(req.question, top_k=req.top_k)
 
+    routing = RoutingResponse.model_validate(result.routing)
+    retrieval_quality = (
+        RetrievalQualityResponse.model_validate(result.retrieval_quality)
+        if result.retrieval_quality is not None
+        else None
+    )
+
     return QueryResponse(
         answer=result.answer,
         sources=[
@@ -126,6 +149,8 @@ async def query_documents(req: QueryRequest):
             for s in result.sources
         ],
         tokens_used=result.tokens_used,
+        routing=routing,
+        retrieval_quality=retrieval_quality,
     )
 
 

@@ -640,6 +640,21 @@ function addAssistantMessage(data) {
     }</div>`;
   }
 
+  if (data.routing) {
+    html += `<div class="tokens">Route: ${esc(data.routing.route)}`;
+    if (data.routing.sub_queries && data.routing.sub_queries.length) {
+      html += ` (${data.routing.sub_queries.length} Sub-Queries)`;
+    }
+    html += `</div>`;
+  }
+
+  if (data.retrieval_quality) {
+    const q = data.retrieval_quality;
+    html += `<div class="tokens">Chunks: ${q.chunks_relevant}/${q.chunks_retrieved} relevant, ${q.chunks_filtered} gefiltert`;
+    if (q.fallback_triggered) html += ' — Fallback';
+    html += `</div>`;
+  }
+
   if (data.tokens_used) {
     html += `<div class="tokens">${data.tokens_used} Tokens</div>`;
   }
