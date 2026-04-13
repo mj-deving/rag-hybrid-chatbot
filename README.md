@@ -37,8 +37,10 @@ python src/main.py
 - **Automatisches Chunking** -- Rekursives Splitting (~500 Tokens, 50 Overlap)
 - **Lokale Embeddings** -- fastembed (BAAI/bge-small-en-v1.5, 384-dim, ONNX) -- kein API Key noetig
 - **Vector Search** -- Qdrant In-Memory mit Cosine Similarity
+- **Adaptive RAG** -- Query-Routing: einfache Fragen direkt beantworten, dokumentspezifische via Vector Search, komplexe via Multi-Query-Decomposition
+- **Corrective RAG (CRAG)** -- Post-Retrieval Relevanz-Check filtert irrelevante Chunks, Fallback bei fehlender Relevanz
 - **LLM-Antworten** -- Claude via OpenRouter mit Quellenangaben
-- **Chat UI** -- Single-Page HTML mit Dark Theme, responsive
+- **Chat UI** -- Single-Page HTML mit Dark Theme, responsive, zeigt Route und Retrieval-Qualitaet
 - **REST API** -- 4 Endpoints mit Swagger UI unter `/docs`
 
 ## Architektur
@@ -58,10 +60,22 @@ FastAPI (src/api.py)
     |                    vector_store.py
     |                      Qdrant In-Memory (384-dim, Cosine)
     |
-    +-- POST /query  --> rag_engine.py
-    |                      embed_query (fastembed)
-    |                      search (Qdrant top-k)
-    |                      generate (Claude via OpenRouter)
+    +-- POST /query  --> rag_engine.py (Orchestrator)
+    |                      |
+    |                      1. query_classifier.py (Adaptive RAG)
+    |                      |    Classify: simple | standard | complex
+    |                      |
+    |                      2. SIMPLE --> direkte LLM-Antwort (kein Retrieval)
+    |                         STANDARD --> embed + search + CRAG + generate
+    |                         COMPLEX --> Multi-Query-Decomposition:
+    |                      |              Sub-Queries -> je embed + search + CRAG
+    |                      |              -> Merge + Deduplicate -> generate
+    |                      |
+    |                      3. relevance_checker.py (CRAG)
+    |                      |    Relevanz-Check pro Chunk (Confidence >= 0.3)
+    |                      |    Fallback wenn keine relevanten Chunks
+    |                      |
+    |                      4. generate (Claude via OpenRouter)
     |
     +-- GET /documents --> vector_store.py (list)
     +-- DELETE /documents/{id} --> vector_store.py (delete)
@@ -83,7 +97,7 @@ FastAPI (src/api.py)
 curl -X POST http://localhost:8000/upload \
   -F "file=@dokument.md"
 
-# Frage stellen
+# Frage stellen (Response enthaelt routing + retrieval_quality)
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
   -d '{"question": "Was ist der November-2025-Wendepunkt?", "top_k": 5}'
@@ -100,9 +114,12 @@ curl -X DELETE http://localhost:8000/documents/{document_id}
 ```
 src/
   api.py                 # FastAPI Endpoints
+  llm_client.py          # Shared OpenRouter Client + Konstanten
+  query_classifier.py    # Adaptive RAG: Query-Routing (simple/standard/complex)
+  relevance_checker.py   # CRAG: Post-Retrieval Relevanz-Check
   document_processor.py  # Text-Extraktion, Chunking, Embedding
   vector_store.py        # Qdrant In-Memory Wrapper
-  rag_engine.py          # RAG Pipeline (Retrieve + Generate)
+  rag_engine.py          # RAG Orchestrator (Classify -> Route -> Retrieve -> Filter -> Generate)
   main.py                # Server-Startup
 static/
   index.html             # Chat UI (Single-File, kein Build)
@@ -111,6 +128,8 @@ scripts/
 tests/
   test_document_processor.py
   test_vector_store.py
+  test_query_classifier.py
+  test_relevance_checker.py
   test_api.py
 ```
 
@@ -129,7 +148,7 @@ tests/
 
 ```bash
 pytest tests/ -v
-# 25 Tests: document_processor (9), vector_store (7), api (9)
+# 36 Tests: document_processor (9), vector_store (7), query_classifier (5), relevance_checker (5), api (9), main (1)
 ```
 
 ## Konfiguration
