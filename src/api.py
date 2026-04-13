@@ -1,9 +1,10 @@
 """FastAPI application with RAG endpoints."""
 
+import os
 from datetime import date
 from pathlib import Path
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import Depends, FastAPI, Header, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,6 +22,19 @@ app = FastAPI(
     description="Dokumente hochladen, indexieren und Fragen stellen mit kontextbasierten Antworten.",
     version="1.0.0",
 )
+
+API_KEY = os.environ.get("RAG_API_KEY", "")
+
+
+async def verify_api_key(authorization: str | None = Header(default=None)):
+    """Check bearer token if RAG_API_KEY is configured."""
+    if not API_KEY:
+        return
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    token = authorization.removeprefix("Bearer ")
+    if token != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
 
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
@@ -94,7 +108,7 @@ class DeleteResponse(BaseModel):
 # --- Endpoints ---
 
 
-@app.post("/upload", response_model=UploadResponse)
+@app.post("/upload", response_model=UploadResponse, dependencies=[Depends(verify_api_key)])
 async def upload_document(file: UploadFile = File(...)):
     """Upload a PDF or Markdown file for indexing."""
     filename = file.filename or "unknown"
@@ -130,7 +144,7 @@ async def upload_document(file: UploadFile = File(...)):
     )
 
 
-@app.post("/query", response_model=QueryResponse)
+@app.post("/query", response_model=QueryResponse, dependencies=[Depends(verify_api_key)])
 async def query_documents(req: QueryRequest):
     """Ask a question against indexed documents."""
     result = rag_query(req.question, top_k=req.top_k)
@@ -154,7 +168,7 @@ async def query_documents(req: QueryRequest):
     )
 
 
-@app.get("/documents", response_model=DocumentListResponse)
+@app.get("/documents", response_model=DocumentListResponse, dependencies=[Depends(verify_api_key)])
 async def get_documents():
     """List all indexed documents."""
     docs = list_documents()
@@ -171,7 +185,7 @@ async def get_documents():
     )
 
 
-@app.delete("/documents/{document_id}", response_model=DeleteResponse)
+@app.delete("/documents/{document_id}", response_model=DeleteResponse, dependencies=[Depends(verify_api_key)])
 async def remove_document(document_id: str):
     """Remove a document and all its vectors."""
     deleted = delete_document(document_id)
