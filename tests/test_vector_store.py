@@ -6,14 +6,6 @@ from src.document_processor import Chunk, EMBEDDING_DIM
 import src.vector_store as vs
 
 
-@pytest.fixture(autouse=True)
-def reset_client():
-    """Reset the Qdrant client for each test."""
-    vs._client = None
-    yield
-    vs._client = None
-
-
 def _make_chunks(n: int, doc_id: str = "test123", source: str = "test.md") -> list[Chunk]:
     """Create test chunks with dummy embeddings."""
     return [

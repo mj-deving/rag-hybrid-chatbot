@@ -4,18 +4,9 @@ import pytest
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
-import src.vector_store as vs
 from src.api import app
 
 client = TestClient(app)
-
-
-@pytest.fixture(autouse=True)
-def reset_vector_store():
-    """Reset Qdrant for each test."""
-    vs._client = None
-    yield
-    vs._client = None
 
 
 class TestUploadEndpoint:
@@ -135,4 +126,47 @@ class TestQueryEndpoint:
 class TestSwaggerDocs:
     def test_docs_accessible(self):
         response = client.get("/docs")
+        assert response.status_code == 200
+
+
+class TestAuth:
+    def test_no_auth_when_key_not_set(self, monkeypatch):
+        """Without RAG_API_KEY, all endpoints are open."""
+        import src.api as api_mod
+        monkeypatch.setattr(api_mod, "API_KEY", "")
+        response = client.get("/documents")
+        assert response.status_code == 200
+
+    def test_rejects_without_token(self, monkeypatch):
+        """With RAG_API_KEY set, requests without token get 401."""
+        import src.api as api_mod
+        monkeypatch.setattr(api_mod, "API_KEY", "test-secret-key")
+        response = client.get("/documents")
+        assert response.status_code == 401
+
+    def test_accepts_valid_token(self, monkeypatch):
+        """With RAG_API_KEY set, requests with correct token succeed."""
+        import src.api as api_mod
+        monkeypatch.setattr(api_mod, "API_KEY", "test-secret-key")
+        response = client.get(
+            "/documents",
+            headers={"Authorization": "Bearer test-secret-key"},
+        )
+        assert response.status_code == 200
+
+    def test_rejects_wrong_token(self, monkeypatch):
+        """With RAG_API_KEY set, requests with wrong token get 401."""
+        import src.api as api_mod
+        monkeypatch.setattr(api_mod, "API_KEY", "test-secret-key")
+        response = client.get(
+            "/documents",
+            headers={"Authorization": "Bearer wrong-key"},
+        )
+        assert response.status_code == 401
+
+    def test_root_accessible_without_auth(self, monkeypatch):
+        """Static file serving works even with auth enabled."""
+        import src.api as api_mod
+        monkeypatch.setattr(api_mod, "API_KEY", "test-secret-key")
+        response = client.get("/")
         assert response.status_code == 200

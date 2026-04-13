@@ -14,6 +14,7 @@ build/
 # Data
 data/cache/
 data/outputs/
+data/qdrant/
 
 # AI working state
 MEMORY/

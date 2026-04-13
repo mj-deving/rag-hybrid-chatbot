@@ -1,7 +1,9 @@
-"""Qdrant vector store wrapper — in-memory mode."""
+"""Qdrant vector store wrapper — persistent file-based storage."""
 
+import os
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -17,8 +19,10 @@ from qdrant_client.models import (
 from src.document_processor import EMBEDDING_DIM, Chunk
 
 COLLECTION_NAME = "documents"
+QDRANT_PATH = os.environ.get(
+    "QDRANT_PATH", str(Path(__file__).parent.parent / "data" / "qdrant")
+)
 
-# Singleton client
 _client: QdrantClient | None = None
 
 
@@ -39,17 +43,19 @@ class DocumentInfo:
 
 
 def get_client() -> QdrantClient:
-    """Get or initialize the in-memory Qdrant client."""
+    """Get or initialize the Qdrant client with persistent storage."""
     global _client
     if _client is None:
-        _client = QdrantClient(":memory:")
-        _client.create_collection(
-            collection_name=COLLECTION_NAME,
-            vectors_config=VectorParams(
-                size=EMBEDDING_DIM,
-                distance=Distance.COSINE,
-            ),
-        )
+        Path(QDRANT_PATH).mkdir(parents=True, exist_ok=True)
+        _client = QdrantClient(path=QDRANT_PATH)
+        if not _client.collection_exists(COLLECTION_NAME):
+            _client.create_collection(
+                collection_name=COLLECTION_NAME,
+                vectors_config=VectorParams(
+                    size=EMBEDDING_DIM,
+                    distance=Distance.COSINE,
+                ),
+            )
     return _client
 
 
