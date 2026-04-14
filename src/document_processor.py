@@ -11,7 +11,7 @@ from fastembed import TextEmbedding
 # Lazy-loaded singleton
 _model: TextEmbedding | None = None
 MODEL_NAME = os.environ.get(
-    "EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5"
+    "EMBEDDING_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 )
 EMBEDDING_DIM = int(os.environ.get("EMBEDDING_DIM", "384"))
 CHUNK_SIZE = 2000  # ~500 tokens ≈ 2000 chars

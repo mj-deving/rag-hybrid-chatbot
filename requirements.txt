@@ -10,6 +10,9 @@ qdrant-client>=1.12.0
 # Embeddings (ONNX-based, no torch dependency)
 fastembed>=0.8.0
 
+# Knowledge Graph
+networkx>=3.0
+
 # PDF parsing
 PyMuPDF>=1.24.0
 

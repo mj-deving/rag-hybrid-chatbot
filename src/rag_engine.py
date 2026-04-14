@@ -3,11 +3,12 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
-from src.llm_client import get_client, MODEL, ROUTE_SIMPLE, ROUTE_COMPLEX
+from src.llm_client import get_client, MODEL, ROUTE_SIMPLE, ROUTE_COMPLEX, ROUTE_RELATIONAL
 from src.document_processor import embed_query
 from src.vector_store import search, SearchResult
 from src.query_classifier import classify_query, ClassificationResult
 from src.relevance_checker import check_relevance, RetrievalQuality
+from src.knowledge_graph import get_graph
 
 SYSTEM_PROMPT = """Du bist ein hilfreicher Assistent, der Fragen basierend auf bereitgestelltem Kontext beantwortet.
 Regeln:
@@ -41,6 +42,7 @@ class QueryResult:
     tokens_used: int
     routing: ClassificationResult
     retrieval_quality: RetrievalQuality | None = None
+    graph_entities: list[dict] | None = None
 
 
 def build_context(results: list[SearchResult]) -> str:
@@ -103,6 +105,7 @@ def _retrieve_and_filter(question: str, top_k: int) -> tuple[list[SearchResult],
 def _build_result(
     answer: str, tokens: int, routing: ClassificationResult,
     results: list[SearchResult], quality: RetrievalQuality | None,
+    graph_entities: list[dict] | None = None,
 ) -> QueryResult:
     sources = [
         Source(document=r.source, chunk=r.chunk_index, relevance=round(r.score, 4))
@@ -111,7 +114,28 @@ def _build_result(
     return QueryResult(
         answer=answer, sources=sources, tokens_used=tokens,
         routing=routing, retrieval_quality=quality,
+        graph_entities=graph_entities,
     )
+
+
+GRAPH_SYSTEM_PROMPT = """Du bist ein hilfreicher Assistent, der Fragen über Beziehungen zwischen Entitäten beantwortet.
+Du erhältst einen Knowledge Graph (Entitäten und Relationen) sowie optionalen Dokumenten-Kontext.
+Regeln:
+- Beschreibe die gefundenen Beziehungen klar und strukturiert
+- Nenne die beteiligten Entitäten und ihre Verbindungen
+- Wenn der Graph die Frage nicht beantwortet, sage das ehrlich
+- Antworte auf Deutsch, es sei denn die Frage ist auf Englisch"""
+
+
+def _build_graph_context(graph_entities: list[dict]) -> str:
+    """Build context string from graph query results."""
+    parts = []
+    for entity in graph_entities:
+        lines = [f"Entität: {entity['name']} (Typ: {entity.get('type', '?')})"]
+        for neighbor in entity.get("neighbors", []):
+            lines.append(f"  → {neighbor['relation']} → {neighbor['entity']}")
+        parts.append("\n".join(lines))
+    return "\n\n".join(parts)
 
 
 def query(question: str, top_k: int = 5) -> QueryResult:
@@ -122,6 +146,42 @@ def query(question: str, top_k: int = 5) -> QueryResult:
         answer, tokens = _generate_simple_answer(question)
         return _build_result(answer, tokens, classification, [], None)
 
+    # RELATIONAL route: graph traversal + optional vector context
+    if classification.route == ROUTE_RELATIONAL:
+        graph = get_graph()
+        entity_names = classification.entity_names or []
+        graph_entities = graph.find_relevant_entities(entity_names)
+
+        if graph_entities:
+            graph_context = _build_graph_context(graph_entities)
+            context = f"Knowledge Graph:\n{graph_context}"
+
+            # Also try vector search for additional context
+            try:
+                relevant_results, retrieval_quality = _retrieve_and_filter(question, top_k=top_k)
+                if relevant_results:
+                    vector_context = build_context(relevant_results)
+                    context += f"\n\n---\n\nDokument-Kontext:\n{vector_context}"
+            except Exception:
+                relevant_results, retrieval_quality = [], None
+
+            answer, tokens = _generate_answer(context, question, GRAPH_SYSTEM_PROMPT)
+            return _build_result(
+                answer, tokens, classification,
+                relevant_results if relevant_results else [],
+                retrieval_quality,
+                graph_entities=graph_entities,
+            )
+        else:
+            # No graph results — fall back to vector search
+            relevant_results, retrieval_quality = _retrieve_and_filter(question, top_k=top_k)
+            if not relevant_results:
+                return _build_result(FALLBACK_ANSWER, 0, classification, [], retrieval_quality, graph_entities=[])
+            context = build_context(relevant_results)
+            answer, tokens = _generate_answer(context, question, SYSTEM_PROMPT)
+            return _build_result(answer, tokens, classification, relevant_results, retrieval_quality, graph_entities=[])
+
+    # COMPLEX route: vector search + graph context
     if classification.route == ROUTE_COMPLEX and classification.sub_queries:
         all_results: list[SearchResult] = []
         seen: set[tuple[str, int]] = set()
@@ -148,13 +208,27 @@ def query(question: str, top_k: int = 5) -> QueryResult:
             fallback_triggered=len(all_results) == 0,
         )
 
+        # Enhance with graph context for complex queries
+        graph = get_graph()
+        graph_entities = []
+        if graph.node_count > 0:
+            # Extract potential entity names from the question
+            words = [w for w in question.split() if len(w) > 3 and w[0].isupper()]
+            if words:
+                graph_entities = graph.find_relevant_entities(words)
+
         if not all_results:
-            return _build_result(FALLBACK_ANSWER, 0, classification, [], merged_quality)
+            return _build_result(FALLBACK_ANSWER, 0, classification, [], merged_quality, graph_entities=graph_entities or None)
 
         context = build_context(all_results)
-        answer, tokens = _generate_answer(context, question, SYSTEM_PROMPT)
-        return _build_result(answer, tokens, classification, all_results, merged_quality)
+        if graph_entities:
+            graph_context = _build_graph_context(graph_entities)
+            context += f"\n\n---\n\nKnowledge Graph:\n{graph_context}"
 
+        answer, tokens = _generate_answer(context, question, SYSTEM_PROMPT)
+        return _build_result(answer, tokens, classification, all_results, merged_quality, graph_entities=graph_entities or None)
+
+    # STANDARD route (default)
     relevant_results, retrieval_quality = _retrieve_and_filter(question, top_k=top_k)
 
     if not relevant_results:

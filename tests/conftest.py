@@ -6,6 +6,7 @@ import tempfile
 import pytest
 
 import src.vector_store as vs
+import src.knowledge_graph as kg
 
 
 @pytest.fixture(autouse=True)
@@ -18,3 +19,13 @@ def isolated_qdrant(tmp_path, monkeypatch):
     if vs._client is not None:
         vs._client.close()
     vs._client = None
+
+
+@pytest.fixture(autouse=True)
+def isolated_graph(tmp_path, monkeypatch):
+    """Give each test its own temp graph file and reset the singleton."""
+    graph_path = str(tmp_path / "graph.json")
+    monkeypatch.setattr(kg, "GRAPH_PATH", graph_path)
+    kg._graph = None
+    yield
+    kg._graph = None

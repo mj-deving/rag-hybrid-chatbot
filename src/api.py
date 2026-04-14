@@ -16,10 +16,12 @@ load_env()
 from src.document_processor import process_document
 from src.vector_store import upsert_chunks, list_documents, delete_document
 from src.rag_engine import query as rag_query
+from src.entity_extractor import extract_entities_and_relations
+from src.knowledge_graph import get_graph
 
 app = FastAPI(
-    title="RAG Chatbot API",
-    description="Dokumente hochladen, indexieren und Fragen stellen mit kontextbasierten Antworten.",
+    title="RAG Hybrid Chatbot API",
+    description="Hybrid RAG: Vector Search + Knowledge Graph mit adaptivem Query-Routing.",
     version="1.0.0",
 )
 
@@ -61,8 +63,9 @@ class SourceResponse(BaseModel):
 
 class RoutingResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    route: str = Field(description="Query route: simple, standard, or complex")
+    route: str = Field(description="Query route: simple, standard, complex, or relational")
     sub_queries: list[str] = Field(default_factory=list, description="Sub-queries for complex route")
+    entity_names: list[str] = Field(default_factory=list, description="Entity names for relational route")
 
 
 class RetrievalQualityResponse(BaseModel):
@@ -79,6 +82,7 @@ class QueryResponse(BaseModel):
     tokens_used: int
     routing: RoutingResponse
     retrieval_quality: RetrievalQualityResponse | None = None
+    graph_entities: list[dict] | None = None
 
 
 class UploadResponse(BaseModel):
@@ -136,6 +140,14 @@ async def upload_document(file: UploadFile = File(...)):
     upsert_chunks(chunks)
     document_id = chunks[0].document_id
 
+    # Extract entities and relations for knowledge graph
+    full_text = "\n".join(c.text for c in chunks)
+    entities, relations = extract_entities_and_relations(full_text, document_id)
+    if entities or relations:
+        graph = get_graph()
+        graph.add_entities(entities)
+        graph.add_relations(relations)
+
     return UploadResponse(
         document_id=document_id,
         filename=filename,
@@ -165,6 +177,7 @@ async def query_documents(req: QueryRequest):
         tokens_used=result.tokens_used,
         routing=routing,
         retrieval_quality=retrieval_quality,
+        graph_entities=result.graph_entities,
     )
 
 
@@ -191,6 +204,10 @@ async def remove_document(document_id: str):
     deleted = delete_document(document_id)
     if deleted == 0:
         raise HTTPException(status_code=404, detail=f"Document {document_id} not found")
+
+    # Clean up graph data for this document
+    graph = get_graph()
+    graph.delete_document(document_id)
 
     return DeleteResponse(
         document_id=document_id,

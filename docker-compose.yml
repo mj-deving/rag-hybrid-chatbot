@@ -1,0 +1,11 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/qdrant:/app/data/qdrant
+    env_file:
+      - .env
+    environment:
+      - QDRANT_PATH=/app/data/qdrant

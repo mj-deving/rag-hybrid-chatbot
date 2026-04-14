@@ -10,7 +10,8 @@ client = TestClient(app)
 
 
 class TestUploadEndpoint:
-    def test_upload_markdown(self, tmp_path):
+    @patch("src.api.extract_entities_and_relations", return_value=([], []))
+    def test_upload_markdown(self, mock_extract, tmp_path):
         content = b"# Test\n\nSome content for testing the upload endpoint."
         response = client.post(
             "/upload",
@@ -44,7 +45,8 @@ class TestDocumentsEndpoint:
         assert response.status_code == 200
         assert response.json()["documents"] == []
 
-    def test_list_after_upload(self):
+    @patch("src.api.extract_entities_and_relations", return_value=([], []))
+    def test_list_after_upload(self, mock_extract):
         client.post(
             "/upload",
             files={"file": ("doc.md", b"# Hello\n\nContent here.", "text/markdown")},
@@ -56,7 +58,8 @@ class TestDocumentsEndpoint:
 
 
 class TestDeleteEndpoint:
-    def test_delete_existing(self):
+    @patch("src.api.extract_entities_and_relations", return_value=([], []))
+    def test_delete_existing(self, mock_extract):
         resp = client.post(
             "/upload",
             files={"file": ("del.md", b"# Delete me\n\nSome text.", "text/markdown")},
@@ -73,10 +76,11 @@ class TestDeleteEndpoint:
 
 
 class TestQueryEndpoint:
+    @patch("src.api.extract_entities_and_relations", return_value=([], []))
     @patch("src.rag_engine.get_client")
     @patch("src.relevance_checker.get_client")
     @patch("src.query_classifier.get_client")
-    def test_query_with_mock_llm(self, mock_cls_client, mock_rel_client, mock_eng_client):
+    def test_query_with_mock_llm(self, mock_cls_client, mock_rel_client, mock_eng_client, mock_extract):
         import json as _json
 
         client.post(

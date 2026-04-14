@@ -69,6 +69,20 @@ class TestClassifyQuery:
         assert result.sub_queries == []
 
     @patch("src.query_classifier.get_client")
+    def test_relational_route(self, mock_get_client):
+        mock_get_client.return_value = _mock_client(
+            json.dumps({
+                "route": "relational",
+                "sub_queries": [],
+                "entity_names": ["Alice", "Acme Corp"],
+            })
+        )
+        result = classify_query("Wie sind Alice und Acme Corp verbunden?")
+        assert result.route == "relational"
+        assert result.entity_names == ["Alice", "Acme Corp"]
+        assert result.sub_queries == []
+
+    @patch("src.query_classifier.get_client")
     def test_fallback_on_malformed_response(self, mock_get_client):
         """If LLM returns garbage, fall back to standard route."""
         mock_get_client.return_value = _mock_client("this is not json")

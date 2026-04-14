@@ -15,6 +15,7 @@ build/
 data/cache/
 data/outputs/
 data/qdrant/
+data/graph.json
 
 # AI working state
 MEMORY/
