@@ -1,14 +1,30 @@
 # RAG Hybrid Chatbot
 
-![Python](https://img.shields.io/badge/python-3.12+-blue.svg)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+[![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](#tech-stack)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.135+-009688.svg)](#tech-stack)
+[![Tests](https://img.shields.io/badge/tests-61%2F61-brightgreen.svg)](#tests)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](#quick-start-docker)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
 
 **Hybrid RAG: Vector Search + Knowledge Graph mit adaptivem Query-Routing.**
 
 RAG (Retrieval-Augmented Generation) Chatbot mit Vector Search (Qdrant), Graph RAG (NetworkX), Adaptive Routing und CRAG. FastAPI, Claude via OpenRouter, lokale Embeddings ohne externe API-Abhaengigkeit.
 
 ![RAG Hybrid Chatbot Screenshot](docs/screenshot.png)
+
+## Table of Contents
+
+- [Quick Start (Docker)](#quick-start-docker) — ein Befehl, laeuft
+- [Quick Start (Lokal)](#quick-start-lokal) — venv + pip
+- [Features](#features) — was der Chatbot kann
+- [Architektur](#architektur) — Upload Pipeline, Query Pipeline, Gesamtuebersicht
+- [Query Routing](#query-routing) — 4 Routen im Vergleich
+- [API Endpoints](#api-endpoints) — REST API mit Beispielen
+- [Projektstruktur](#projektstruktur) — Dateien und Module
+- [Tech Stack](#tech-stack) — Versionen und Komponenten
+- [Tests](#tests) — 61 Tests, kein API-Call noetig
+- [Konfiguration](#konfiguration) — Env-Variablen
+- [License](#license)
 
 ## Quick Start (Docker)
 
@@ -25,7 +41,7 @@ docker compose up --build
 # -> http://localhost:8000
 ```
 
-Vektordaten werden in `data/qdrant/` persistiert und ueberleben Container-Neustarts.
+Vektordaten werden in `data/qdrant/` und der Knowledge Graph in `data/graph.json` persistiert — beides ueberlebt Container-Neustarts.
 
 ## Quick Start (Lokal)
 
@@ -50,16 +66,16 @@ python src/main.py
 
 ## Features
 
-- **Dokument-Upload** -- PDF, Markdown, TXT per Drag-and-Drop oder API
-- **Automatisches Chunking** -- Rekursives Splitting (~500 Tokens, 50 Overlap)
-- **Lokale Embeddings** -- fastembed (paraphrase-multilingual-MiniLM-L12-v2, 384-dim, ONNX) -- kein API Key noetig
-- **Vector Search** -- Qdrant In-Memory mit Cosine Similarity
-- **Adaptive RAG** -- Query-Routing: einfache Fragen direkt beantworten, dokumentspezifische via Vector Search, komplexe via Multi-Query-Decomposition
-- **Graph RAG** -- Knowledge Graph aus Entitäten und Relationen (NetworkX), automatisch bei Upload extrahiert, RELATIONAL-Route fuer Beziehungsfragen
-- **Corrective RAG (CRAG)** -- Post-Retrieval Relevanz-Check filtert irrelevante Chunks, Fallback bei fehlender Relevanz
-- **LLM-Antworten** -- Claude via OpenRouter mit Quellenangaben
-- **Chat UI** -- Single-Page HTML mit Dark Theme, responsive, zeigt Route und Retrieval-Qualitaet
-- **REST API** -- 4 Endpoints mit Swagger UI unter `/docs`
+- **Dokument-Upload** — PDF, Markdown, TXT per Drag-and-Drop oder API
+- **Automatisches Chunking** — Rekursives Splitting (~500 Tokens, 50 Overlap)
+- **Lokale Embeddings** — fastembed (paraphrase-multilingual-MiniLM-L12-v2, 384-dim, ONNX) — kein API Key noetig
+- **Vector Search** — Qdrant mit Cosine Similarity, persistent file-based
+- **Graph RAG** — Knowledge Graph aus Entitaeten und Relationen (NetworkX), automatisch bei Upload extrahiert
+- **Adaptive RAG** — 4-Wege Query-Routing: simple, standard, complex, relational
+- **Corrective RAG (CRAG)** — Post-Retrieval Relevanz-Check filtert irrelevante Chunks
+- **LLM-Antworten** — Claude via OpenRouter mit Quellenangaben
+- **Chat UI** — Single-Page HTML mit Dark Theme, responsive
+- **REST API** — 4 Endpoints mit Swagger UI unter `/docs`
 
 ## Architektur
 
@@ -69,13 +85,13 @@ python src/main.py
 flowchart LR
     A[Browser] -->|POST /upload| B[FastAPI]
     B --> C[document_processor.py]
-    C -->|extract_text| C1[PyMuPDF / Markdown]
-    C -->|chunk_text| C2[Recursive Split]
-    C -->|embed_texts| C3[fastembed ONNX]
-    C3 --> D[(Qdrant\n384-dim Cosine)]
+    C -->|extract + chunk + embed| D[(Qdrant\n384-dim Cosine)]
     B --> E[entity_extractor.py]
-    E -->|LLM Haiku| F[Knowledge Graph\nNetworkX]
-    F --> G[(data/graph.json)]
+    E -->|LLM Haiku| F[(Knowledge Graph\nNetworkX)]
+
+    style B fill:#6c8cff,color:#0f1117,stroke:none
+    style D fill:#4ade80,color:#0f1117,stroke:none
+    style F fill:#a78bfa,color:#0f1117,stroke:none
 ```
 
 ### Query Pipeline
@@ -84,17 +100,19 @@ flowchart LR
 flowchart TD
     Q[Frage] --> CL[query_classifier.py\nAdaptive RAG]
     CL -->|simple| S[Direkte LLM-Antwort]
-    CL -->|standard| ST[Vector Search]
-    CL -->|complex| CX[Multi-Query\n+ Graph Context]
+    CL -->|standard| ST[Vector Search\n+ CRAG Filter]
+    CL -->|complex| CX[Multi-Query\n+ Graph Context\n+ CRAG Filter]
     CL -->|relational| RL[Graph Traversal\n+ Vector Search]
 
-    ST --> CRAG[relevance_checker.py\nCRAG Filter]
-    CX --> CRAG
-    RL --> CRAG
-
-    CRAG --> GEN[Claude via OpenRouter\nAntwort generieren]
-    S --> OUT[Response\n+ Sources + Graph Entities]
+    S --> OUT[Response + Sources\n+ Graph Entities]
+    ST --> GEN[Claude via OpenRouter]
+    CX --> GEN
+    RL --> GEN
     GEN --> OUT
+
+    style CL fill:#22d3ee,color:#0f1117,stroke:none
+    style GEN fill:#6c8cff,color:#0f1117,stroke:none
+    style OUT fill:#4ade80,color:#0f1117,stroke:none
 ```
 
 ### Gesamtuebersicht
@@ -122,7 +140,23 @@ flowchart TB
 
     API -->|GET /documents| VS
     API -->|DELETE /documents| VS
+
+    style API fill:#6c8cff,color:#0f1117,stroke:none
+    style VS fill:#4ade80,color:#0f1117,stroke:none
+    style KG fill:#a78bfa,color:#0f1117,stroke:none
+    style LLM fill:#fbbf24,color:#0f1117,stroke:none
 ```
+
+## Query Routing
+
+Der Classifier entscheidet automatisch anhand der Frage, welche Route genutzt wird:
+
+| Route | Wann | Retrieval | Graph | Beispiel |
+|-------|------|-----------|-------|----------|
+| **simple** | Allgemeine Wissensfragen | — | — | "Was ist RAG?" |
+| **standard** | Dokumentspezifische Fragen | Vector Search + CRAG | — | "Was sagt Willison ueber November 2025?" |
+| **complex** | Vergleichende Multi-Aspekt-Fragen | Parallele Sub-Queries + CRAG | Context | "Vergleiche die RAG-Architekturen" |
+| **relational** | Beziehungen zwischen Entitaeten | Fallback | Traversal | "Wer arbeitet mit wem?" |
 
 ## API Endpoints
 
@@ -133,26 +167,89 @@ flowchart TB
 | `GET` | `/documents` | Alle indexierten Dokumente auflisten |
 | `DELETE` | `/documents/{id}` | Dokument und Vektoren entfernen |
 
-### Beispiele
+### `POST /upload`
 
 ```bash
-# Dokument hochladen
-curl -X POST http://localhost:8000/upload \
-  -F "file=@dokument.md"
+curl -X POST http://localhost:8000/upload -F "file=@dokument.md"
+```
 
-# Frage stellen (Response enthaelt routing + retrieval_quality)
+**Response:**
+```json
+{
+  "document_id": "a1b2c3d4e5f6",
+  "filename": "dokument.md",
+  "chunks": 3,
+  "status": "indexed"
+}
+```
+
+### `POST /query`
+
+```bash
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
   -d '{"question": "Was ist der November-2025-Wendepunkt?", "top_k": 5}'
+```
 
-# Dokumente auflisten
-curl http://localhost:8000/documents
+**Response:**
+```json
+{
+  "answer": "Laut dem Dokument...",
+  "sources": [
+    {"document": "bericht.md", "chunk": 2, "relevance": 0.8734}
+  ],
+  "tokens_used": 1250,
+  "routing": {
+    "route": "standard",
+    "sub_queries": [],
+    "entity_names": []
+  },
+  "retrieval_quality": {
+    "chunks_retrieved": 5,
+    "chunks_relevant": 3,
+    "chunks_filtered": 2,
+    "fallback_triggered": false
+  },
+  "graph_entities": null
+}
+```
 
-# Relationale Frage (Graph RAG)
+### `POST /query` (relational)
+
+```bash
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
   -d '{"question": "Welche Organisationen arbeiten zusammen?"}'
-# Response enthaelt "graph_entities" mit Entitaeten und Relationen
+```
+
+**Response (mit Graph Entities):**
+```json
+{
+  "answer": "Im Knowledge Graph sind folgende Verbindungen...",
+  "sources": [],
+  "tokens_used": 800,
+  "routing": {
+    "route": "relational",
+    "sub_queries": [],
+    "entity_names": ["Acme Corp", "TechStart GmbH"]
+  },
+  "graph_entities": [
+    {
+      "name": "Acme Corp",
+      "type": "organization",
+      "neighbors": [
+        {"entity": "TechStart GmbH", "relation": "kooperiert_mit"}
+      ]
+    }
+  ]
+}
+```
+
+### Weitere Endpoints
+
+```bash
+# Dokumente auflisten
+curl http://localhost:8000/documents
 
 # Dokument loeschen
 curl -X DELETE http://localhost:8000/documents/{document_id}
@@ -161,49 +258,64 @@ curl -X DELETE http://localhost:8000/documents/{document_id}
 ## Projektstruktur
 
 ```
-src/
-  api.py                 # FastAPI Endpoints
-  llm_client.py          # Shared OpenRouter Client + Konstanten
-  query_classifier.py    # Adaptive RAG: Query-Routing (simple/standard/complex/relational)
-  relevance_checker.py   # CRAG: Post-Retrieval Relevanz-Check
-  document_processor.py  # Text-Extraktion, Chunking, Embedding
-  vector_store.py        # Qdrant Persistent Storage (data/qdrant/)
-  knowledge_graph.py     # Knowledge Graph (NetworkX, JSON-persistent)
-  entity_extractor.py    # LLM-basierte Entitaets- und Relationsextraktion
-  rag_engine.py          # RAG Orchestrator (Classify -> Route -> Retrieve -> Filter -> Generate)
-  main.py                # Server-Startup
-static/
-  index.html             # Chat UI (Single-File, kein Build)
-scripts/
-  upload_test_docs.py    # 5 Testdokumente hochladen + abfragen
-tests/
-  test_document_processor.py
-  test_vector_store.py
-  test_knowledge_graph.py
-  test_entity_extractor.py
-  test_query_classifier.py
-  test_relevance_checker.py
-  test_api.py
+rag-hybrid-chatbot/
+├── src/
+│   ├── api.py                 # FastAPI Endpoints
+│   ├── llm_client.py          # Shared OpenRouter Client + Konstanten
+│   ├── query_classifier.py    # Adaptive RAG: 4-Wege Query-Routing
+│   ├── relevance_checker.py   # CRAG: Post-Retrieval Relevanz-Check
+│   ├── document_processor.py  # Text-Extraktion, Chunking, Embedding
+│   ├── vector_store.py        # Qdrant Persistent Storage
+│   ├── knowledge_graph.py     # Knowledge Graph (NetworkX, JSON-persistent)
+│   ├── entity_extractor.py    # LLM-basierte Entitaets-Extraktion
+│   ├── rag_engine.py          # RAG Orchestrator
+│   └── main.py                # Server-Startup
+├── static/
+│   └── index.html             # Chat UI (Single-File, kein Build)
+├── scripts/
+│   └── upload_test_docs.py    # Test-Dokumente hochladen + abfragen
+├── tests/                     # 61 pytest Tests
+├── Dockerfile                 # Python 3.12-slim
+├── docker-compose.yml         # One-command Setup
+├── requirements.txt
+└── README.md
 ```
 
 ## Tech Stack
 
-| Komponente | Tool |
-|------------|------|
-| API Framework | FastAPI + Uvicorn |
-| Vector DB | Qdrant (persistent file-based, kein Docker noetig) |
-| Embeddings | fastembed / paraphrase-multilingual-MiniLM-L12-v2 (ONNX, lokal, konfigurierbar) |
-| Knowledge Graph | NetworkX (In-Memory, JSON-persistent) |
-| LLM | Claude Sonnet via OpenRouter |
-| PDF Parsing | PyMuPDF |
-| Frontend | Vanilla HTML/CSS/JS |
+| Komponente | Tool | Version |
+|------------|------|---------|
+| Runtime | Python | 3.12+ |
+| API Framework | FastAPI + Uvicorn | 0.135 / 0.44 |
+| Vector DB | Qdrant (persistent file-based) | 1.17 |
+| Embeddings | fastembed / multilingual-MiniLM-L12-v2 (ONNX) | 0.8 |
+| Knowledge Graph | NetworkX (In-Memory, JSON-persistent) | 3.6 |
+| LLM | Claude Sonnet via OpenRouter | openai 2.31 |
+| PDF Parsing | PyMuPDF | 1.27 |
+| Frontend | Vanilla HTML/CSS/JS | — |
+| Container | Docker + Compose | — |
 
 ## Tests
 
+Alle Tests laufen lokal ohne API-Calls (LLM wird gemockt):
+
 ```bash
+source venv/bin/activate
 pytest tests/ -v
-# 61 Tests: document_processor (9), vector_store (7), knowledge_graph (14), entity_extractor (5), query_classifier (6), relevance_checker (5), api (14), main (1)
 ```
+
+61 Tests in 7 Modulen:
+
+| Modul | Tests | Prueft |
+|-------|-------|--------|
+| `test_document_processor.py` | 9 | Text-Extraktion, Chunking, Embedding-Dimensionen |
+| `test_vector_store.py` | 7 | Upsert, Search, List, Delete |
+| `test_knowledge_graph.py` | 14 | Graph CRUD, Traversal, Persistenz, Singleton |
+| `test_entity_extractor.py` | 5 | LLM-Extraktion, Fehlerbehandlung, Parse-Fehler |
+| `test_query_classifier.py` | 6 | Alle 4 Routen + Fallback |
+| `test_relevance_checker.py` | 5 | CRAG Filter, Confidence-Schwellen |
+| `test_api.py` | 14 | Upload, Query, Delete, Auth, Swagger |
+| `test_main.py` | 1 | Env-Loading |
 
 ## Konfiguration
 
@@ -212,18 +324,14 @@ Der Server liest API Keys aus `~/.claude/.env` oder Umgebungsvariablen:
 | Variable | Zweck | Default |
 |----------|-------|---------|
 | `OPENROUTER_API_KEY` | LLM-Zugang (Claude via OpenRouter) | (erforderlich) |
-| `RAG_API_KEY` | Bearer-Token fuer API-Authentifizierung | (leer = Auth deaktiviert) |
+| `RAG_API_KEY` | Bearer-Token fuer API-Auth | (leer = Auth deaktiviert) |
 | `EMBEDDING_MODEL` | fastembed Modellname | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` |
-| `EMBEDDING_DIM` | Vektor-Dimension passend zum Modell | `384` |
-| `QDRANT_PATH` | Pfad fuer persistente Qdrant-Daten | `data/qdrant/` |
-| `GRAPH_PATH` | Pfad fuer persistenten Knowledge Graph | `data/graph.json` |
+| `EMBEDDING_DIM` | Vektor-Dimension | `384` |
+| `QDRANT_PATH` | Pfad fuer Qdrant-Daten | `data/qdrant/` |
+| `GRAPH_PATH` | Pfad fuer Knowledge Graph | `data/graph.json` |
 
-Embeddings laufen lokal -- kein weiterer Key noetig.
+Embeddings laufen lokal — kein weiterer Key noetig.
 Fuer englischsprachige Dokumente: `EMBEDDING_MODEL=BAAI/bge-small-en-v1.5`.
-
-## Einschraenkungen
-
-- **Embedding-Modell**: paraphrase-multilingual-MiniLM-L12-v2 ist der Default (optimiert fuer Deutsch und 50+ Sprachen). Fuer rein englische Corpora kann `BAAI/bge-small-en-v1.5` via Env-Var gesetzt werden — leicht hoehere Englisch-Praezision, aber schlechtere Trennung bei deutschen Queries
 
 ## License
 
