@@ -6,9 +6,9 @@
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](#quick-start-docker)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
 
-**Hybrid RAG: Vector Search + Knowledge Graph with adaptive query routing.**
+**Chat with your documents — upload PDFs, Markdown, or text files and ask questions with cited answers.**
 
-RAG (Retrieval-Augmented Generation) chatbot combining Vector Search (Qdrant), Graph RAG (NetworkX), Adaptive Routing, and CRAG. FastAPI backend, Claude via OpenRouter, local embeddings with no external API dependency.
+Hybrid RAG (Retrieval-Augmented Generation) chatbot combining Vector Search (Qdrant) + Knowledge Graph (NetworkX) with adaptive query routing and CRAG. Local embeddings (no external API needed), Claude via OpenRouter for generation.
 
 ![RAG Hybrid Chatbot Screenshot](docs/screenshot.png)
 
