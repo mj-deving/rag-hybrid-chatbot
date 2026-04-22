@@ -6,6 +6,8 @@
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](#quick-start-docker)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
 
+![Qdrant](https://img.shields.io/badge/-Qdrant-DC382D?style=flat-square) ![Python](https://img.shields.io/badge/-Python-3776AB?style=flat-square) ![Docker](https://img.shields.io/badge/-Docker-2496ED?style=flat-square)
+
 **Chat with your documents — upload PDFs, Markdown, or text files and ask questions with cited answers.**
 
 Hybrid RAG (Retrieval-Augmented Generation) chatbot combining Vector Search (Qdrant) + Knowledge Graph (NetworkX) with adaptive query routing and CRAG. Local embeddings (no external API needed), Claude via OpenRouter for generation.
