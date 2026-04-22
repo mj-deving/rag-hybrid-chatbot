@@ -1,11 +1,5 @@
 # RAG Hybrid Chatbot
 
-[![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](#tech-stack)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.135+-009688.svg)](#tech-stack)
-[![Tests](https://img.shields.io/badge/tests-61%2F61-brightgreen.svg)](#tests)
-[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](#quick-start-docker)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
-
 ![Qdrant](https://img.shields.io/badge/-Qdrant-DC382D?style=flat-square) ![Python](https://img.shields.io/badge/-Python-3776AB?style=flat-square) ![Docker](https://img.shields.io/badge/-Docker-2496ED?style=flat-square)
 
 **Chat with your documents — upload PDFs, Markdown, or text files and ask questions with cited answers.**
